@@ -3,7 +3,7 @@ This module provides classes and methods to launch the HermesRun service.
 hrun is ....
 """
 
-from jarvis_cd.basic.pkg import Service
+from jarvis_cd.basic.pkg import Service, Color
 from jarvis_util import *
 
 
@@ -324,6 +324,7 @@ class HermesRun(Service):
         if len(dev_df) == 0:
             raise Exception('Hermes needs at least one storage device')
         devs = dev_df.rows
+        self.config['borg_paths'] = []
         for i, dev in enumerate(devs):
             dev_type = dev['dev_type']
             custom_name = f'{dev_type}_{i}'
@@ -352,6 +353,7 @@ class HermesRun(Service):
                 'borg_capacity_thresh': [0.0, 1.0],
                 'slab_sizes': ['4KB', '16KB', '64KB', '1MB']
             }
+            self.config['borg_paths'].append(mount)
             Mkdir(mount, PsshExecInfo(hostfile=self.jarvis.hostfile,
                                       env=self.env))
         if 'ram' in self.config and self.config['ram'] != '0':
@@ -383,12 +385,12 @@ class HermesRun(Service):
                     break
             if provider is None:
                 provider = opts[0]
-        print(f'Provider: {provider}')
+        self.log(f'Provider: {provider}')
         net_info_save = net_info
         net_info = net_info[lambda r: str(r['provider']) == provider,
                             ['provider', 'domain']]
         if len(net_info) == 0:
-            print(net_info_save)
+            self.log(net_info_save)
             raise Exception(f'Failed to find hermes_run provider {provider}')
         net_info = net_info.rows[0]
         protocol = net_info['provider']
@@ -437,8 +439,8 @@ class HermesRun(Service):
 
         :return: None
         """
-        print(self.env['HERMES_CONF'])
-        print(self.env['HERMES_CLIENT_CONF'])
+        self.log(self.env['HERMES_CONF'])
+        self.log(self.env['HERMES_CLIENT_CONF'])
         self.daemon_pkg = Exec('hrun_start_runtime',
                                 PsshExecInfo(hostfile=self.jarvis.hostfile,
                                              env=self.mod_env,
@@ -449,7 +451,7 @@ class HermesRun(Service):
                                              pipe_stdout=self.config['stdout'],
                                              pipe_stderr=self.config['stderr']))
         time.sleep(self.config['sleep'])
-        print('Done sleeping')
+        self.log('Done sleeping')
 
     def stop(self):
         """
@@ -458,7 +460,7 @@ class HermesRun(Service):
 
         :return: None
         """
-        print('Stopping hermes_run')
+        self.log('Stopping hermes_run')
         Exec('hrun_stop_runtime',
              LocalExecInfo(hostfile=self.jarvis.hostfile,
                            env=self.env,
@@ -466,10 +468,10 @@ class HermesRun(Service):
                            do_dbg=self.config['do_dbg'],
                            dbg_port=self.config['dbg_port'],
                            hide_output=self.config['hide_output']))
-        print('Client Exited?')
+        self.log('Client Exited?')
         if self.daemon_pkg is not None:
             self.daemon_pkg.wait()
-        print('Daemon Exited?')
+        self.log('Daemon Exited?')
 
     def kill(self):
         Kill('hrun',
@@ -479,10 +481,10 @@ class HermesRun(Service):
             Kill('gdbserver',
                  PsshExecInfo(hostfile=self.jarvis.hostfile,
                               env=self.env))
-        print('Client Exited?')
+        self.log('Client Exited?')
         if self.daemon_pkg is not None:
             self.daemon_pkg.wait()
-        print('Daemon Exited?')
+        self.log('Daemon Exited?')
 
     def clean(self):
         """
@@ -491,7 +493,9 @@ class HermesRun(Service):
 
         :return: None
         """
-        pass
+        for path in self.config['borg_paths']:
+            self.log(f'Removing {path}', Color.YELLOW)
+            Rm(path, PsshExecInfo(hostfile=self.jarvis.hostfile))
 
     def status(self):
         """
