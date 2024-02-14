@@ -18,6 +18,10 @@ class JarvisArgs(ArgParse):
         self.jutil.debug_mpi_exec = False
 
     def define_init_opts(self):
+        # jarvis
+        self.add_menu(msg='A tool for configuring and deploying '
+                          'complex workflows')
+
         # jarvis init
         self.add_cmd('init',
                       msg='Initialize jarvis cd configuration')
@@ -379,7 +383,8 @@ class JarvisArgs(ArgParse):
 
         # jarvis pipeline
         self.add_menu('pipeline',
-                      msg='Tools to create + edit a pipeline')
+                      msg='Tools to create + edit a pipeline',
+                      aliases=['ppl'])
 
         # jarvis pipeline list
         self.add_cmd('pipeline list',
@@ -669,7 +674,7 @@ class JarvisArgs(ArgParse):
         self.add_cmd('pkg configure',
                       msg="Configure a pkg in the pipeline",
                       keep_remainder=True,
-                      aliases=['pkg config'])
+                      aliases=['pkg config', 'pkg conf'])
         self.add_args([
             {
                 'name': 'pkg_id',
