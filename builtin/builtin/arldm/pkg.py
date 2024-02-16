@@ -19,12 +19,12 @@ class Arldm(Application):
         Initialize paths
         """
         self.pkg_type = 'arldm'
-        self.hermes_env_vars = ['HERMES_ADAPTER_MODE', 'HERMES_CLIENT_CONF', 
-                                'HERMES_CONF', 'LD_PRELOAD']
-        # self.hermes_env_vars = ['HDF5_DRIVER', 'HDF5_PLUGIN_PATH', 
-        #                   'HERMES_ADAPTER_MODE', 'HERMES_CLIENT_CONF',
-        #                   'HERMES_CONF', 'HERMES_VFD', 'HERMES_POSIX'
-        #                   ]
+        # self.hermes_env_vars = ['HERMES_ADAPTER_MODE', 'HERMES_CLIENT_CONF', 
+        #                         'HERMES_CONF', 'LD_PRELOAD']
+        
+        self.hermes_env_vars = ['HDF5_DRIVER', 'HDF5_PLUGIN_PATH', 
+                          'HERMES_ADAPTER_MODE', 'HERMES_CLIENT_CONF',
+                          'HERMES_CONF', 'HERMES_VFD']
         
     def _configure_menu(self):
         """
@@ -207,14 +207,14 @@ class Arldm(Application):
                 self.setenv('PRETRAIN_MODEL_PATH', pretrain_model_path)
             else:
                 raise Exception("Must set the pretrain_model_path")
-        else:
-            if self.config['local_exp_dir'] is None:
-                pretrain_model_path = os.getenv('PRETRAIN_MODEL_PATH')
-                if pretrain_model_path is not None:
-                    self.log(f"PRETRAIN_MODEL_PATH: {pretrain_model_path}")
-                    self.config['pretrain_model_path'] = pretrain_model_path
-                    # self.env['PRETRAIN_MODEL_PATH'] = pretrain_model_path
-                    self.setenv('PRETRAIN_MODEL_PATH', pretrain_model_path)
+        # else:
+        #     if self.config['local_exp_dir'] is None:
+        #         pretrain_model_path = os.getenv('PRETRAIN_MODEL_PATH')
+        #         if pretrain_model_path is not None:
+        #             self.log(f"PRETRAIN_MODEL_PATH: {pretrain_model_path}")
+        #             self.config['pretrain_model_path'] = pretrain_model_path
+        #             # self.env['PRETRAIN_MODEL_PATH'] = pretrain_model_path
+        #             self.setenv('PRETRAIN_MODEL_PATH', pretrain_model_path)
         
         experiment_input_path = os.getenv('EXPERIMENT_INPUT_PATH')
         if experiment_input_path is None:
@@ -373,25 +373,19 @@ class Arldm(Application):
             vfd_task_file = os.path.join(path_for_task_files, f"{workflow_name}_vfd.curr_task")
             vol_task_file = os.path.join(path_for_task_files, f"{workflow_name}_vol.curr_task")
             # Create file and parent file if it does not exist
-            pathlib.Path(vfd_task_file).mkdir(parents=True, exist_ok=True)
-            pathlib.Path(vol_task_file).mkdir(parents=True, exist_ok=True)
+            pathlib.Path(path_for_task_files).mkdir(parents=True, exist_ok=True)
+            pathlib.Path(path_for_task_files).mkdir(parents=True, exist_ok=True)
             
+            # vfd_task_file = /tmp/$USER/pyflextrkr_vfd.curr_task
+            with open(vfd_task_file, "w") as file:
+                file.write(task)
+            self.log(f"Overwrote: {vfd_task_file} with {task}")
 
-        # vfd_task_file = /tmp/$USER/pyflextrkr_vfd.curr_task
-        
-        if vfd_task_file and os.path.exists(vfd_task_file):
-            if os.path.isfile(vfd_task_file):
-                with open(vfd_task_file, "w") as file:
-                    file.write(task)
-                print(f"Overwrote: {vfd_task_file} with {task}")
-
-        if vol_task_file and os.path.exists(vol_task_file):
-            if os.path.isfile(vol_task_file):
-                with open(vol_task_file, "w") as file:
-                    file.write(task)
-                print(f"Overwrote: {vol_task_file} with {task}")
+            with open(vol_task_file, "w") as file:
+                file.write(task)
+            self.log(f"Overwrote: {vol_task_file} with {task}")
         else:
-            print("Invalid or missing PATH_FOR_TASK_FILES environment variable.")    
+            self.log("Invalid or missing PATH_FOR_TASK_FILES environment variable.")    
 
     def _unset_vfd_vars(self,env_vars_toset):
         cmd = ['conda', 'env', 'config', 'vars', 'unset',]
@@ -455,6 +449,10 @@ class Arldm(Application):
         end = time.time()
         diff = end - start
         self.log(f'TOTAL RUN TIME: {diff} seconds')
+        
+        # Unset conda variable when done
+        if self.config['with_hermes'] == True:
+            self._unset_vfd_vars(self.hermes_env_vars)            
 
 
     def stop(self):
@@ -495,3 +493,7 @@ class Arldm(Application):
         # # Clear cache
         # self.log(f'Clearing cache')
         # Exec(self.config['flush_mem_cmd'], LocalExecInfo(env=self.mod_env,))
+
+        # Unset conda variable
+        if self.config['with_hermes'] == True:
+            self._unset_vfd_vars(self.hermes_env_vars)     
