@@ -19,8 +19,16 @@ class Pyflextrkr(Application):
         Initialize paths
         """
         self.pkg_type = 'pyflextrkr'
-        self.hermes_env_vars = ['HERMES_ADAPTER_MODE', 'HERMES_CLIENT_CONF', 
-                                'HERMES_CONF', 'LD_PRELOAD']
+        self.hermes_env_vars = ['HDF5_DRIVER', 'HDF5_PLUGIN_PATH', 'HERMES_VFD', 
+                                'HERMES_ADAPTER_MODE', 'HERMES_CLIENT_CONF', 
+                                'HERMES_CONF', 'HDF5_USE_FILE_LOCKING']
+        
+        # self.hermes_env_vars = ['HERMES_ADAPTER_MODE', 'HERMES_CLIENT_CONF', 
+        #                         'HERMES_CONF', 'HDF5_USE_FILE_LOCKING', 'HERMES_POSIX']
+        # 'LD_PRELOAD' 'HERMES_POSIX' 'HERMES_VFD'
+        self.dayu_env_vars = ['HDF5_DRIVER', 'HDF5_DRIVER_CONFIG', 'HDF5_PLUGIN_PATH',
+                              'HDF5_VOL_CONNECTOR', 'HDF5_PLUGIN_PATH',
+                              'PATH_FOR_TASK_FILES', "WORKFLOW_NAME"]
 
     def _configure_menu(self):
         """
@@ -106,6 +114,12 @@ class Pyflextrkr(Application):
                 'type': bool,
                 'default': False,
             },
+            {
+                'name': 'with_dayu',
+                'msg': 'Whether it is used with DaYu (e.g. needs to update environment variables)',
+                'type': bool,
+                'default': False,
+            },
         ]
 
     def _configure(self, **kwargs):
@@ -115,6 +129,7 @@ class Pyflextrkr(Application):
         :param kwargs: Configuration parameters for this pkg.
         :return: None
         """
+        self.setenv('HDF5_USE_FILE_LOCKING', 'FALSE')
         
         experiment_input_path = os.getenv('EXPERIMENT_INPUT_PATH')
         if experiment_input_path is None:
@@ -170,7 +185,8 @@ class Pyflextrkr(Application):
         
 
     def _configure_yaml(self):
-        self.env['HDF5_USE_FILE_LOCKING'] = "FALSE" # set HDF5 locking: FALSE, TRUE, BESTEFFORT
+        # self.env['HDF5_USE_FILE_LOCKING'] = "FALSE" # set HDF5 locking: FALSE, TRUE, BESTEFFORT
+        
 
         yaml_file = self.config['config']
         
@@ -275,7 +291,7 @@ class Pyflextrkr(Application):
 
         :return: None
         """
-        self.clean()
+
         
         cmd = []
         if self.config['run_parallel'] == 1:
@@ -333,11 +349,12 @@ class Pyflextrkr(Application):
 
         :return: None
         """
+        # self.clean()
         
         if self.config['with_hermes'] == True:
             self._set_env_vars(self.hermes_env_vars)
-        else:
-            self._unset_vfd_vars(self.hermes_env_vars)
+        # else: # this unsets dayu as well...
+        #     self._unset_vfd_vars(self.hermes_env_vars)
         
         ## Configure yaml file before start
         self._configure_yaml()
@@ -358,7 +375,11 @@ class Pyflextrkr(Application):
         end = time.time()
         diff = end - start
         self.log(f'Pyflextrkr TIME: {diff} seconds') # color=Color.GREEN
-        
+
+        # Unset conda variable
+        if self.config['with_hermes'] == True:
+            self._unset_vfd_vars(self.hermes_env_vars)
+
 
     def stop(self):
         """
@@ -395,6 +416,10 @@ class Pyflextrkr(Application):
         # recursive remove all files in output_data directory
         self.log(f'Removing {output_dir}')
         Rm(output_dir)
+        
+        # Unset conda environments
+        self._unset_vfd_vars(self.hermes_env_vars)
+        self._unset_vfd_vars(self.dayu_env_vars)
         
         ## Do not clear cache in script, clear cache manually
         # # Clear cache

@@ -22,7 +22,12 @@ class Ddmd(Application):
         self.train = None
         self.prev_model_json = None
         self.inference = None
-        self.hermes_env_vars = ['HERMES_ADAPTER_MODE', 'HERMES_CLIENT_CONF', 'HERMES_CONF', 'LD_PRELOAD']
+        # self.hermes_env_vars = ['HERMES_ADAPTER_MODE', 'HERMES_CLIENT_CONF', 'HERMES_CONF']
+        self.hermes_env_vars = ['HDF5_DRIVER', 'HDF5_PLUGIN_PATH', 
+                                'HERMES_ADAPTER_MODE', 'HERMES_CLIENT_CONF',
+                                'HERMES_CONF', 'HERMES_VFD']
+        self.dayu_env_vars = ['HDF5_DRIVER', 'HDF5_DRIVER_CONFIG', 'HDF5_PLUGIN_PATH', 'HDF5_VOL_CONNECTOR',
+                              'PATH_FOR_TASK_FILES', "WORKFLOW_NAME"]
 
     def _configure_menu(self):
         """
@@ -135,7 +140,12 @@ class Ddmd(Application):
                 'type': bool,
                 'default': False,
             },
-            
+            {
+                'name': 'with_dayu',
+                'msg': 'Whether it is used with DaYu (e.g. needs to update task files)',
+                'type': bool,
+                'default': False,
+            },
         ]
 
     def _configure(self, **kwargs):
@@ -178,7 +188,7 @@ class Ddmd(Application):
         if self.config['experiment_path'] is not None:
             self.config['experiment_path'] = os.path.expandvars(self.config['experiment_path'])
             self.env['EXPERIMENT_PATH'] = self.config['experiment_path']
-            pathlib.Path(self.config['experiment_path']).mkdir(parents=True, exist_ok=True)
+            
             
         if self.config['experiment_path'] is None:
             raise Exception('No experiment_path specified')
@@ -194,6 +204,8 @@ class Ddmd(Application):
         
         if self.config['nnodes'] < 1:
             raise Exception('nnodes must be at least 1')
+        if len(self.jarvis.hostfile) < self.config['nnodes']:
+            raise Exception('Not enough nodes in the hostfile')
         
         self.config['md_slide'] = self.config['md_runs'] / self.config['nnodes']
     
@@ -203,6 +215,10 @@ class Ddmd(Application):
 
         :return: None
         """
+        pathlib.Path(self.config['experiment_path']).mkdir(parents=True, exist_ok=True)
+        
+        if self.config['with_dayu'] == True:
+            self._set_curr_task_file("openmm")
         
         all_tasks = []
         
@@ -244,7 +260,6 @@ class Ddmd(Application):
             logfile = dest_path + "/" + task_idx + "_OPENMM.log"
             
             cmd = [
-                f'cd {dest_path};',
                 'conda','run', '-n', self.config['conda_openmm'],
                 'mpirun',
                 '--host', node_name,
@@ -260,8 +275,8 @@ class Ddmd(Application):
             print(F"Running OpenMM on {node_name}: {dest_path}")
             print(f"{conda_cmd} > {logfile}")
             cur_task = Exec(conda_cmd, LocalExecInfo(env=self.mod_env,
-                                          pipe_stdout=logfile,
-                                          exec_async=True))
+                                                     cwd=dest_path,
+                                                     exec_async=True))
             
             all_tasks.append(cur_task)
         
@@ -275,6 +290,9 @@ class Ddmd(Application):
         
         :return: None
         """
+        if self.config['with_dayu'] == True:
+            self._set_curr_task_file("aggregate")
+            
         task_idx = "task0000" # fix to 0
         stage_name="aggregate"
         
@@ -305,7 +323,6 @@ class Ddmd(Application):
             logfile = dest_path + "/" + task_idx + "_AGGREGATE.log"
             
             cmd = [
-                f'cd {dest_path};',
                 'conda','run', '-n', self.config['conda_openmm'],
                 'mpirun',
                 '--host', node_name,
@@ -321,7 +338,7 @@ class Ddmd(Application):
             print(F"Running Aggregate on {node_name}: {dest_path}")
             print(f"{conda_cmd} > {logfile}")
             Exec(conda_cmd, LocalExecInfo(env=self.mod_env,
-                                        pipe_stdout=logfile))
+                                          cwd=dest_path,))
     
     
     def _run_train(self):
@@ -330,6 +347,9 @@ class Ddmd(Application):
         
         :return: None
         """
+        if self.config['with_dayu'] == True:
+            self._set_curr_task_file("train")
+            
         task_idx = "task0000" # fix to 0
         
         stage_idx = "stage" + str((self.config['stage_idx'])).zfill(4)
@@ -374,7 +394,7 @@ class Ddmd(Application):
                 logfile = dest_path + "/" + task_idx + "_TRAIN.log"
                 
                 cmd = [
-                    f'cd {dest_path};',
+                    # f'cd {dest_path};',
                     'conda','run', '-n', self.config['conda_pytorch'],
                     'mpirun',
                     '--host', node_name,
@@ -386,12 +406,19 @@ class Ddmd(Application):
                     '-c', new_yaml_file,
                 ]
                 
+                exec_async=False
+                if self.config['short_pipe'] == True:
+                    exec_async=True
+                    
                 conda_cmd = ' '.join(cmd)
                 print(F"Running Training on {node_name}: {dest_path}")
                 print(f"{conda_cmd} > {logfile}")
+                # conda_cmd = "echo [skiped training]"
+                
+                # TODO: specify which node to run here
                 curr_task = Exec(conda_cmd, LocalExecInfo(env=self.mod_env,
-                                            pipe_stdout=logfile,
-                                            exec_async=True))
+                                                          cwd=dest_path,
+                                                          exec_async=exec_async))
                 return curr_task
         except Exception as e:
             print("ERROR: " + str(e))
@@ -404,6 +431,9 @@ class Ddmd(Application):
         
         :return: None
         """
+        if self.config['with_dayu'] == True:
+            self._set_curr_task_file("inference")
+            
         task_idx = "task0000" # fix to 0
         
         stage_idx = "stage" + str((self.config['stage_idx'])).zfill(4)
@@ -422,6 +452,7 @@ class Ddmd(Application):
         pathlib.Path(agent_run_path).mkdir(parents=True, exist_ok=True)
         
         pretrained_model = self.config['ddmd_path'] + "/data/bba/epoch-130-20201203-150026.pt"
+        # latest_checkpoint = pretrained_model
         
         checkpoint_path_pattern = os.path.join(self.config['experiment_path'], "machine_learning_runs", "*", "*", "checkpoint")
         # Find all matching checkpoint directories
@@ -437,15 +468,16 @@ class Ddmd(Application):
                 # Sort files by epoch and timestamp and get the latest checkpoint
                 # latest_checkpoint = max(checkpoint_files, key=os.path.getmtime) # getctime, this does not get epoch 10
                 latest_checkpoint = max(checkpoint_files, key=lambda x: (int(x.split('-')[1]), int(x.split('-')[2]), int(x.split('-')[3].split('.')[0])))
-                print(f"Latest checkpoint: {latest_checkpoint}")
+                self.log(f"Latest checkpoint: {latest_checkpoint}")
                 
             else:
                 latest_checkpoint = pretrained_model
         else:
-            print(f"Using pretrained model: {pretrained_model}")
+            self.log(f"Using pretrained model: {pretrained_model}")
             latest_checkpoint = pretrained_model
         
         prev_stage_idx = "stage" + str((self.config['stage_idx']-1)).zfill(4)
+        
         # replace $MODEL_CHECKPOINT with latest_checkpoint in the json file
         with open(self.prev_model_json, 'r') as f:
             json_str = f.read()
@@ -471,7 +503,6 @@ class Ddmd(Application):
                 logfile = dest_path + "/" + task_idx + "_INFERENCE.log"
                 
                 cmd = [
-                    f'cd {dest_path};',
                     'conda','run', '-n', self.config['conda_pytorch'],
                     'mpirun',
                     '--host', node_name,
@@ -489,7 +520,7 @@ class Ddmd(Application):
                 print(F"Running Inference on {node_name}: {dest_path}")
                 print(f"{conda_cmd} > {logfile}")
                 curr_task = Exec(conda_cmd, LocalExecInfo(env=self.mod_env,
-                                            pipe_stdout=logfile))
+                                                          cwd=dest_path,))
                 return curr_task
         except Exception as e:
             print("ERROR: " + str(e))
@@ -518,6 +549,31 @@ class Ddmd(Application):
                 return False
         return True
 
+    def _set_curr_task_file(self,task):
+        
+        workflow_name = self.mod_env['WORKFLOW_NAME']
+        path_for_task_files = self.mod_env['PATH_FOR_TASK_FILES']
+        vfd_task_file = None
+        vol_task_file = None
+        
+        if workflow_name and path_for_task_files:
+            vfd_task_file = os.path.join(path_for_task_files, f"{workflow_name}_vfd.curr_task")
+            vol_task_file = os.path.join(path_for_task_files, f"{workflow_name}_vol.curr_task")
+            # Create file and parent file if it does not exist
+            pathlib.Path(path_for_task_files).mkdir(parents=True, exist_ok=True)
+            pathlib.Path(path_for_task_files).mkdir(parents=True, exist_ok=True)
+            
+            # vfd_task_file = /tmp/$USER/pyflextrkr_vfd.curr_task
+            with open(vfd_task_file, "w") as file:
+                file.write(task)
+            self.log(f"Overwrote: {vfd_task_file} with {task}")
+
+            with open(vol_task_file, "w") as file:
+                file.write(task)
+            self.log(f"Overwrote: {vol_task_file} with {task}")
+        else:
+            self.log("Invalid or missing PATH_FOR_TASK_FILES environment variable.") 
+
     def _unset_vfd_vars(self,env_vars_toset):
         
         conda_envs = [self.config['conda_openmm'], self.config['conda_pytorch']]
@@ -533,16 +589,13 @@ class Ddmd(Application):
             
             cmd = ' '.join(cmd)
             Exec(cmd, LocalExecInfo(env=self.mod_env,))
-            self.log(f"DDMD _unset_vfd_vars for {cenv}: {cmd}")
+            self.log(f"DDMD _unset_vfd_vars: {cmd}")
 
     def _set_env_vars(self, env_vars_toset):
         
         conda_envs = [self.config['conda_openmm'], self.config['conda_pytorch']]
         
         for cenv in conda_envs:
-            
-            # Unset all env_vars_toset first
-            self._unset_vfd_vars(env_vars_toset)
 
             cmd = [ 'conda', 'env', 'config', 'vars', 'set']
             for env_var in env_vars_toset:
@@ -552,7 +605,7 @@ class Ddmd(Application):
             cmd.append('-n')
             cmd.append(cenv)
             cmd = ' '.join(cmd)
-            self.log(f"DDMD _set_env_vars for {cenv}: {cmd}")
+            self.log(f"DDMD _set_env_vars: {cmd}")
             Exec(cmd, LocalExecInfo(env=self.mod_env,))
         
 
@@ -564,13 +617,11 @@ class Ddmd(Application):
         :return: None
         """
         
-        print("INFO: removing all previous runs")
-        self.clean()
+        # print("INFO: removing all previous runs")
+        # self.clean()
 
         if self.config['with_hermes'] == True:
             self._set_env_vars(self.hermes_env_vars)
-        else:
-            self._unset_vfd_vars(self.hermes_env_vars)
 
         # Check if all the OpenMM files exist
         if self._check_openmm() == False and self.config['skip_sim'] == True:
@@ -608,6 +659,7 @@ class Ddmd(Application):
             
             train_start = time.time()
             self.train = self._run_train()
+            
             if self.config['short_pipe'] == False:
                 self.train.wait()
                 end = time.time()
@@ -645,6 +697,9 @@ class Ddmd(Application):
              PsshExecInfo(hostfile=self.jarvis.hostfile,
                           env=self.env))
         
+        self._unset_vfd_vars(self.hermes_env_vars)
+        self._unset_vfd_vars(self.dayu_env_vars)
+        
     def stop(self):
         """
         Stop a running application. E.g., OrangeFS will terminate the servers,
@@ -652,7 +707,7 @@ class Ddmd(Application):
 
         :return: None
         """
-        pass
+
 
     def clean(self):
         """
@@ -669,13 +724,15 @@ class Ddmd(Application):
         if self.config['skip_sim'] == True:
             print("INFO: do not clean OpenMM")
             # remove all paths excepts molecular_dynamics_runs
-            for rp in remove_paths:
-                if rp != "molecular_dynamics_runs":
-                    remove_path = self.config['experiment_path'] + "/" + rp
-                    print("INFO: removing " + remove_path)
-                    Rm(remove_path)
-        else:
-            for rp in remove_paths:
+            remove_paths.remove("molecular_dynamics_runs")
+        
+        if self.config['short_pipe'] == True:
+            print("INFO: do not clean aggregate_runs")
+            # remove all paths excepts model_selection_runs
+            remove_paths.remove("aggregate_runs")
+        
+        for rp in remove_paths:
+            if rp != "molecular_dynamics_runs":
                 remove_path = self.config['experiment_path'] + "/" + rp
                 print("INFO: removing " + remove_path)
                 Rm(remove_path)

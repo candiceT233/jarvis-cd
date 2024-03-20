@@ -1,6 +1,6 @@
 batch_size: 1
 calculate_fid: true
-ckpt_dir: /mnt/nvme/mtang11/arldm_run/save_ckpt
+ckpt_dir: /home/mtang11/experiments/arldm_run/input_data/vistsis_save_ckpt
 dataset: vistsis
 flintstones:
   blip_embedding_tokens: 30525
@@ -48,7 +48,7 @@ pororo:
   - rody
   - petty
 run_name: vistsis_train
-sample_output_dir: /mnt/nvme/mtang11/arldm_run/output_data/sample_out_vistsis_train
+sample_output_dir: /home/mtang11/experiments/arldm_run/input_data/sample_out_vistsis_train
 scheduler: ddim
 seed: 0
 task: continuation
@@ -62,6 +62,6 @@ vistdii:
 vistsis:
   blip_embedding_tokens: 30524
   clip_embedding_tokens: 49408
-  hdf5_file: /mnt/nvme/mtang11/arldm_run/output_data/vistsis_out.h5
+  hdf5_file: /home/mtang11/experiments/arldm_run/input_data/vistsis_out.h5
   max_length: 100
 warmup_epochs: 1
