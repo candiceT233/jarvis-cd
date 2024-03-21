@@ -351,6 +351,10 @@ class Pyflextrkr(Application):
         """
         # self.clean()
         
+        if self.config['flush_mem'] == True:
+            self.log(f'Flushing memory')
+            Exec(self.config['flush_mem_cmd'], LocalExecInfo(env=self.mod_env,))
+        
         if self.config['with_hermes'] == True:
             self._set_env_vars(self.hermes_env_vars)
         # else: # this unsets dayu as well...
