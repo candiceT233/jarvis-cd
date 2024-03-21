@@ -296,7 +296,7 @@ class Pyflextrkr(Application):
         cmd = []
         if self.config['run_parallel'] == 1:
             cmd = [
-            'conda','run', '-v','-n', self.config['conda_env'],
+            'conda','run', '-n', self.config['conda_env'],
             ]
         elif self.config['run_parallel'] == 2:
             host_list_str = None
@@ -323,7 +323,7 @@ class Pyflextrkr(Application):
             # mpirun --host $hostlist --npernode 2
             ppn = self.config['nprocesses']/len(self.jarvis.hostfile)
             cmd = [
-                'conda','run', '-v','-n', self.config['conda_env'],
+                'conda','run', '-n', self.config['conda_env'],
                 'mpirun',
                 '--host', host_list_str,
                 '-n', str(self.config['nprocesses']),
@@ -399,6 +399,9 @@ class Pyflextrkr(Application):
         """
         cmd = ['killall', '-9', 'python']
         Exec(' '.join(cmd), LocalExecInfo(hostfile=self.jarvis.hostfile))
+        
+        self._unset_vfd_vars(self.hermes_env_vars)
+        self._unset_vfd_vars(self.dayu_env_vars)
 
     def clean(self):
         """

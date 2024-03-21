@@ -89,7 +89,7 @@ HDF5_MPI="OFF" HDF5_DIR=${YOUR_HDF5_DIR} pip install --no-cache-dir --no-binary=
 pip install xarray[io] mpi4py
 conda deactivate
 ```
-
+<!-- HDF5_MPI="OFF" HDF5_DIR=/qfs/people/tang584/install/hdf5 pip install --no-cache-dir --no-binary=h5py h5py==3.8.0 -->
 
 
 # 2. Running Pyflextrkr
@@ -155,7 +155,7 @@ module load pyflextrkr
 
 Store the current environment in the pipeline.
 ```bash
-jarvis env build pyflextr +PYFLEXTRKR_PATH +EXPERIMENT_INPUT_PATH
+jarvis env build pyflextr +PYFLEXTRKR_PATH +EXPERIMENT_PATH +EXPERIMENT_INPUT_PATH
 jarvis pipeline env copy pyflextr
 ```
 
@@ -351,6 +351,7 @@ Create a Jarvis pipeline with Pyflextrkr.
 ```bash
 jarvis pipeline append pyflextrkr runscript=$TEST_NAME local_exp_dir=$LOCAL_INPUT_PATH
 ```
+<!-- jarvis pipeline append pyflextrkr runscript=run_mcs_tbpfradar3d_wrf -->
 
 ## 5.7. Run the Experiment
 
