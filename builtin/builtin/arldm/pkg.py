@@ -19,12 +19,14 @@ class Arldm(Application):
         Initialize paths
         """
         self.pkg_type = 'arldm'
-        # self.hermes_env_vars = ['HERMES_ADAPTER_MODE', 'HERMES_CLIENT_CONF', 
-        #                         'HERMES_CONF', 'LD_PRELOAD']
+        self.hermes_env_vars = ['HERMES_ADAPTER_MODE', 'HERMES_CLIENT_CONF', 
+                                'HERMES_CONF', 'HERMES_POSIX'] #'LD_PRELOAD'
         
-        self.hermes_env_vars = ['HDF5_DRIVER', 'HDF5_PLUGIN_PATH', 
-                          'HERMES_ADAPTER_MODE', 'HERMES_CLIENT_CONF',
-                          'HERMES_CONF', 'HERMES_VFD']
+        # self.hermes_env_vars = ['HDF5_DRIVER', 'HDF5_PLUGIN_PATH', 
+        #                   'HERMES_ADAPTER_MODE', 'HERMES_CLIENT_CONF',
+        #                   'HERMES_CONF', 'HERMES_VFD']
+        self.dayu_env_vars = ['HDF5_DRIVER', 'HDF5_DRIVER_CONFIG', 'HDF5_PLUGIN_PATH', 'HDF5_VOL_CONNECTOR',
+                              'PATH_FOR_TASK_FILES', "WORKFLOW_NAME"]
         
     def _configure_menu(self):
         """
@@ -140,6 +142,12 @@ class Arldm(Application):
                 'type': str,
                 'default': None,
             },
+            {
+                'name': 'hdf5_chunk',
+                'msg': 'Use chunked HDF5 datasets',
+                'type': int,
+                'default': 0,
+            },
         ]
 
     def _configure_yaml(self):
@@ -167,6 +175,9 @@ class Arldm(Application):
                     self.config['ckpt_dir'] = experiment_input_path + f"/{self.config['runscript']}_save_ckpt"
                     self.config['sample_output_dir'] = experiment_input_path + f"/sample_out_{self.config['runscript']}_{self.config['mode']}"
                     self.config['hdf5_file'] = f"{experiment_input_path}/{self.config['runscript']}_out.h5"
+                    if self.config['hdf5_chunk'] > 0:
+                        self.config['hdf5_file'] = f"{experiment_input_path}/{self.config['runscript']}_out_chunk.h5"
+                        
 
                 config_vars['ckpt_dir'] = self.config['ckpt_dir']
                 config_vars['sample_output_dir'] = self.config['sample_output_dir']
@@ -195,6 +206,9 @@ class Arldm(Application):
         
         self.setenv('HDF5_USE_FILE_LOCKING', "FALSE") # set HDF5 locking: FALSE, TRUE, BESTEFFORT
         self.setenv('HYDRA_FULL_ERROR', "1")
+        if self.config['hdf5_chunk'] > 0:
+            chunk_num = self.config['hdf5_chunk']
+            self.setenv('CHUNK_NUM', str(chunk_num))
         
         if self.config['pretrain_model_path'] is None:
             pretrain_model_path = os.getenv('PRETRAIN_MODEL_PATH')
@@ -255,6 +269,8 @@ class Arldm(Application):
         
         # set sample_output_dir
         self.config['hdf5_file'] = f'{self.config["experiment_input_path"]}/{self.config["runscript"]}_out.h5'
+        if self.config['hdf5_chunk'] > 0:
+            self.config['hdf5_file'] = f'{self.config["experiment_input_path"]}/{self.config["runscript"]}_out_chunk.h5'
                 
         self._configure_yaml()
         
@@ -279,15 +295,21 @@ class Arldm(Application):
         ]
 
         if self.config['runscript'] == 'pororo':
+            # TODO: need to add script for pororo
+            # if self.config['hdf5_chunk'] > 0:
+            #     cmd.append(f'{self.config["arldm_path"]}/data_script/pororo_hdf5_chunk.py')
+            # else: cmd.append(f'{self.config["arldm_path"]}/data_script/pororo_hdf5.py')
             cmd.append(f'{self.config["arldm_path"]}/data_script/pororo_hdf5.py')
             cmd.append(f'--data_dir {experiment_input_path}/pororo')
             cmd.append(f'--save_path {self.config["hdf5_file"]}')
         elif self.config['runscript'] == 'flintstones':
-            cmd.append(f'{self.config["arldm_path"]}/data_script/flintstones_hdf5.py')
+            if self.config['hdf5_chunk'] > 0: cmd.append(f'{self.config["arldm_path"]}/data_script/flintstones_hdf5_chunk.py')
+            else: cmd.append(f'{self.config["arldm_path"]}/data_script/flintstones_hdf5.py')
             cmd.append(f'--data_dir {experiment_input_path}/flintstones')
             cmd.append(f'--save_path {self.config["hdf5_file"]}')
         elif self.config['runscript'] == 'vistsis' or self.config['runscript'] == 'vistdii':
-            cmd.append(f'{self.config["arldm_path"]}/data_script/vist_hdf5.py')
+            if self.config['hdf5_chunk'] > 0: cmd.append(f'{self.config["arldm_path"]}/data_script/vist_hdf5_chunk.py')
+            else: cmd.append(f'{self.config["arldm_path"]}/data_script/vist_hdf5.py')
             # experiment_input_path = f'{experiment_input_path}/{self.config["runscript"]}'
             cmd.append(f'--sis_json_dir {experiment_input_path}/vistsis')
             cmd.append(f'--dii_json_dir {experiment_input_path}/vistdii')
@@ -373,7 +395,6 @@ class Arldm(Application):
             vfd_task_file = os.path.join(path_for_task_files, f"{workflow_name}_vfd.curr_task")
             vol_task_file = os.path.join(path_for_task_files, f"{workflow_name}_vol.curr_task")
             # Create file and parent file if it does not exist
-            pathlib.Path(path_for_task_files).mkdir(parents=True, exist_ok=True)
             pathlib.Path(path_for_task_files).mkdir(parents=True, exist_ok=True)
             
             # vfd_task_file = /tmp/$USER/pyflextrkr_vfd.curr_task
@@ -462,7 +483,15 @@ class Arldm(Application):
 
         :return: None
         """
-        pass
+        self._unset_vfd_vars(self.hermes_env_vars)
+        self._unset_vfd_vars(self.dayu_env_vars)
+
+    def kill(self):
+        """
+        Kill a running application. E.g., OrangeFS will terminate the servers,
+        """
+        self._unset_vfd_vars(self.hermes_env_vars)
+        self._unset_vfd_vars(self.dayu_env_vars)
 
     def clean(self):
         """
@@ -472,6 +501,8 @@ class Arldm(Application):
         :return: None
         """
         output_h5 = self.config['experiment_input_path'] + f"/{self.config['runscript']}_out.h5"
+        if self.config['hdf5_chunk'] > 0:
+            output_h5 = self.config['experiment_input_path'] + f"/{self.config['runscript']}_out_chunk.h5"
         output_dir = self.config['experiment_input_path'] + f"/sample_out_{self.config['runscript']}_{self.config['mode']}"
         if self.config['local_exp_dir'] is not None:
             output_dir = self.config['local_exp_dir'] + f"/sample_out_{self.config['runscript']}_{self.config['mode']}"
