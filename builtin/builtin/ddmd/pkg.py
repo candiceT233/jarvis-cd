@@ -22,10 +22,12 @@ class Ddmd(Application):
         self.train = None
         self.prev_model_json = None
         self.inference = None
-        # self.hermes_env_vars = ['HERMES_ADAPTER_MODE', 'HERMES_CLIENT_CONF', 'HERMES_CONF']
+        
+        # self.hermes_env_vars = ['HERMES_ADAPTER_MODE', 'HERMES_CLIENT_CONF', 'HERMES_CONF', 'HERMES_POSIX']
         self.hermes_env_vars = ['HDF5_DRIVER', 'HDF5_PLUGIN_PATH', 
                                 'HERMES_ADAPTER_MODE', 'HERMES_CLIENT_CONF',
                                 'HERMES_CONF', 'HERMES_VFD']
+        
         self.dayu_env_vars = ['HDF5_DRIVER', 'HDF5_DRIVER_CONFIG', 'HDF5_PLUGIN_PATH', 'HDF5_VOL_CONNECTOR',
                               'PATH_FOR_TASK_FILES', "WORKFLOW_NAME"]
 
@@ -324,10 +326,10 @@ class Ddmd(Application):
             
             cmd = [
                 'conda','run', '-n', self.config['conda_openmm'],
-                'mpirun',
-                '--host', node_name,
-                '-np', str(1),
-                '-env',
+                # 'mpirun',
+                # '--host', node_name,
+                # '-np', str(1),
+                # '-env',
                 f'PYTHONPATH={self.config["ddmd_path"]}',
                 'python',
                 f'{self.config["ddmd_path"]}/deepdrivemd/aggregation/basic/aggregate.py',
@@ -396,10 +398,10 @@ class Ddmd(Application):
                 cmd = [
                     # f'cd {dest_path};',
                     'conda','run', '-n', self.config['conda_pytorch'],
-                    'mpirun',
-                    '--host', node_name,
-                    '-np', str(1),
-                    '-env',
+                    # 'mpirun',
+                    # '--host', node_name,
+                    # '-np', str(1),
+                    # '-env',
                     f'PYTHONPATH={self.config["ddmd_path"]}:{self.config["molecules_path"]}',
                     'python',
                     f'{self.config["ddmd_path"]}/deepdrivemd/models/aae/train.py',
@@ -504,12 +506,11 @@ class Ddmd(Application):
                 
                 cmd = [
                     'conda','run', '-n', self.config['conda_pytorch'],
-                    'mpirun',
-                    '--host', node_name,
-                    '-np', str(1),
-                    '-env',
+                    # 'mpirun',
+                    # '--host', node_name,
+                    # '-np', str(1),
+                    # '-env',
                     'OMP_NUM_THREADS=4',
-                    '-env',
                     f'PYTHONPATH={self.config["ddmd_path"]}:{self.config["molecules_path"]}',
                     'python',
                     f'{self.config["ddmd_path"]}/deepdrivemd/agents/lof/lof.py',
@@ -618,7 +619,7 @@ class Ddmd(Application):
         """
         
         # print("INFO: removing all previous runs")
-        # self.clean()
+        self.clean()
 
         if self.config['with_hermes'] == True:
             self._set_env_vars(self.hermes_env_vars)
